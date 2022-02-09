@@ -8,23 +8,23 @@ import (
 // WalkFn is used when walking the tree. Takes a
 // key and value, returning if iteration should
 // be terminated.
-type WalkFn func(s string, v interface{}) bool
+type WalkFn[V any] func(s string, v V) bool
 
 // leafNode is used to represent a value
-type leafNode struct {
+type leafNode[V any] struct {
 	key string
-	val interface{}
+	val V
 }
 
 // edge is used to represent an edge node
-type edge struct {
+type edge[V any] struct {
 	label byte
-	node  *node
+	node  *node[V]
 }
 
-type node struct {
+type node[V any] struct {
 	// leaf is used to store possible leaf
-	leaf *leafNode
+	leaf *leafNode[V]
 
 	// prefix is the common prefix we ignore
 	prefix string
@@ -32,19 +32,24 @@ type node struct {
 	// Edges should be stored in-order for iteration.
 	// We avoid a fully materialized slice to save memory,
 	// since in most cases we expect to be sparse
-	edges edges
+	edges edges[V]
 }
 
-func (n *node) isLeaf() bool {
+func zeroVal[T any]() T {
+	var result T
+	return result
+}
+
+func (n *node[V]) isLeaf() bool {
 	return n.leaf != nil
 }
 
-func (n *node) addEdge(e edge) {
+func (n *node[V]) addEdge(e edge[V]) {
 	n.edges = append(n.edges, e)
 	n.edges.Sort()
 }
 
-func (n *node) updateEdge(label byte, node *node) {
+func (n *node[V]) updateEdge(label byte, node *node[V]) {
 	num := len(n.edges)
 	idx := sort.Search(num, func(i int) bool {
 		return n.edges[i].label >= label
@@ -56,7 +61,7 @@ func (n *node) updateEdge(label byte, node *node) {
 	panic("replacing missing edge")
 }
 
-func (n *node) getEdge(label byte) *node {
+func (n *node[V]) getEdge(label byte) *node[V] {
 	num := len(n.edges)
 	idx := sort.Search(num, func(i int) bool {
 		return n.edges[i].label >= label
@@ -67,33 +72,33 @@ func (n *node) getEdge(label byte) *node {
 	return nil
 }
 
-func (n *node) delEdge(label byte) {
+func (n *node[V]) delEdge(label byte) {
 	num := len(n.edges)
 	idx := sort.Search(num, func(i int) bool {
 		return n.edges[i].label >= label
 	})
 	if idx < num && n.edges[idx].label == label {
 		copy(n.edges[idx:], n.edges[idx+1:])
-		n.edges[len(n.edges)-1] = edge{}
+		n.edges[len(n.edges)-1] = edge[V]{}
 		n.edges = n.edges[:len(n.edges)-1]
 	}
 }
 
-type edges []edge
+type edges[V any] []edge[V]
 
-func (e edges) Len() int {
+func (e edges[V]) Len() int {
 	return len(e)
 }
 
-func (e edges) Less(i, j int) bool {
+func (e edges[V]) Less(i, j int) bool {
 	return e[i].label < e[j].label
 }
 
-func (e edges) Swap(i, j int) {
+func (e edges[V]) Swap(i, j int) {
 	e[i], e[j] = e[j], e[i]
 }
 
-func (e edges) Sort() {
+func (e edges[V]) Sort() {
 	sort.Sort(e)
 }
 
@@ -101,20 +106,20 @@ func (e edges) Sort() {
 // Dictionary abstract data type. The main advantage over
 // a standard hash map is prefix-based lookups and
 // ordered iteration,
-type Tree struct {
-	root *node
+type Tree[V any] struct {
+	root *node[V]
 	size int
 }
 
 // New returns an empty Tree
-func New() *Tree {
-	return NewFromMap(nil)
+func New[V any]() *Tree[V] {
+	return NewFromMap[V](nil)
 }
 
 // NewFromMap returns a new tree containing the keys
 // from an existing map
-func NewFromMap(m map[string]interface{}) *Tree {
-	t := &Tree{root: &node{}}
+func NewFromMap[V any](m map[string]V) *Tree[V] {
+	t := &Tree[V]{root: &node[V]{}}
 	for k, v := range m {
 		t.Insert(k, v)
 	}
@@ -122,7 +127,7 @@ func NewFromMap(m map[string]interface{}) *Tree {
 }
 
 // Len is used to return the number of elements in the tree
-func (t *Tree) Len() int {
+func (t *Tree[V]) Len() int {
 	return t.size
 }
 
@@ -144,8 +149,8 @@ func longestPrefix(k1, k2 string) int {
 
 // Insert is used to add a newentry or update
 // an existing entry. Returns if updated.
-func (t *Tree) Insert(s string, v interface{}) (interface{}, bool) {
-	var parent *node
+func (t *Tree[V]) Insert(s string, v V) (V, bool) {
+	var parent *node[V]
 	n := t.root
 	search := s
 	for {
@@ -157,12 +162,12 @@ func (t *Tree) Insert(s string, v interface{}) (interface{}, bool) {
 				return old, true
 			}
 
-			n.leaf = &leafNode{
+			n.leaf = &leafNode[V]{
 				key: s,
 				val: v,
 			}
 			t.size++
-			return nil, false
+			return zeroVal[V](), false
 		}
 
 		// Look for the edge
@@ -171,10 +176,10 @@ func (t *Tree) Insert(s string, v interface{}) (interface{}, bool) {
 
 		// No edge, create one
 		if n == nil {
-			e := edge{
+			e := edge[V]{
 				label: search[0],
-				node: &node{
-					leaf: &leafNode{
+				node: &node[V]{
+					leaf: &leafNode[V]{
 						key: s,
 						val: v,
 					},
@@ -183,7 +188,7 @@ func (t *Tree) Insert(s string, v interface{}) (interface{}, bool) {
 			}
 			parent.addEdge(e)
 			t.size++
-			return nil, false
+			return zeroVal[V](), false
 		}
 
 		// Determine longest prefix of the search key on match
@@ -195,20 +200,20 @@ func (t *Tree) Insert(s string, v interface{}) (interface{}, bool) {
 
 		// Split the node
 		t.size++
-		child := &node{
+		child := &node[V]{
 			prefix: search[:commonPrefix],
 		}
 		parent.updateEdge(search[0], child)
 
 		// Restore the existing node
-		child.addEdge(edge{
+		child.addEdge(edge[V]{
 			label: n.prefix[commonPrefix],
 			node:  n,
 		})
 		n.prefix = n.prefix[commonPrefix:]
 
 		// Create a new leaf node
-		leaf := &leafNode{
+		leaf := &leafNode[V]{
 			key: s,
 			val: v,
 		}
@@ -217,25 +222,25 @@ func (t *Tree) Insert(s string, v interface{}) (interface{}, bool) {
 		search = search[commonPrefix:]
 		if len(search) == 0 {
 			child.leaf = leaf
-			return nil, false
+			return zeroVal[V](), false
 		}
 
 		// Create a new edge for the node
-		child.addEdge(edge{
+		child.addEdge(edge[V]{
 			label: search[0],
-			node: &node{
+			node: &node[V]{
 				leaf:   leaf,
 				prefix: search,
 			},
 		})
-		return nil, false
+		return zeroVal[V](), false
 	}
 }
 
 // Delete is used to delete a key, returning the previous
 // value and if it was deleted
-func (t *Tree) Delete(s string) (interface{}, bool) {
-	var parent *node
+func (t *Tree[V]) Delete(s string) (V, bool) {
+	var parent *node[V]
 	var label byte
 	n := t.root
 	search := s
@@ -263,7 +268,7 @@ func (t *Tree) Delete(s string) (interface{}, bool) {
 			break
 		}
 	}
-	return nil, false
+	return zeroVal[V](), false
 
 DELETE:
 	// Delete the leaf
@@ -292,18 +297,18 @@ DELETE:
 // DeletePrefix is used to delete the subtree under a prefix
 // Returns how many nodes were deleted
 // Use this to delete large subtrees efficiently
-func (t *Tree) DeletePrefix(s string) int {
+func (t *Tree[V]) DeletePrefix(s string) int {
 	return t.deletePrefix(nil, t.root, s)
 }
 
 // delete does a recursive deletion
-func (t *Tree) deletePrefix(parent, n *node, prefix string) int {
+func (t *Tree[V]) deletePrefix(parent, n *node[V], prefix string) int {
 	// Check for key exhaustion
 	if len(prefix) == 0 {
 		// Remove the leaf node
 		subTreeSize := 0
 		//recursively walk from all edges of the node to be deleted
-		recursiveWalk(n, func(s string, v interface{}) bool {
+		recursiveWalk(n, func(s string, v V) bool {
 			subTreeSize++
 			return false
 		})
@@ -336,7 +341,7 @@ func (t *Tree) deletePrefix(parent, n *node, prefix string) int {
 	return t.deletePrefix(n, child, prefix)
 }
 
-func (n *node) mergeChild() {
+func (n *node[V]) mergeChild() {
 	e := n.edges[0]
 	child := e.node
 	n.prefix = n.prefix + child.prefix
@@ -346,7 +351,7 @@ func (n *node) mergeChild() {
 
 // Get is used to lookup a specific key, returning
 // the value and if it was found
-func (t *Tree) Get(s string) (interface{}, bool) {
+func (t *Tree[V]) Get(s string) (V, bool) {
 	n := t.root
 	search := s
 	for {
@@ -371,13 +376,13 @@ func (t *Tree) Get(s string) (interface{}, bool) {
 			break
 		}
 	}
-	return nil, false
+	return zeroVal[V](), false
 }
 
 // LongestPrefix is like Get, but instead of an
 // exact match, it will return the longest prefix match.
-func (t *Tree) LongestPrefix(s string) (string, interface{}, bool) {
-	var last *leafNode
+func (t *Tree[V]) LongestPrefix(s string) (string, V, bool) {
+	var last *leafNode[V]
 	n := t.root
 	search := s
 	for {
@@ -407,11 +412,11 @@ func (t *Tree) LongestPrefix(s string) (string, interface{}, bool) {
 	if last != nil {
 		return last.key, last.val, true
 	}
-	return "", nil, false
+	return "", zeroVal[V](), false
 }
 
 // Minimum is used to return the minimum value in the tree
-func (t *Tree) Minimum() (string, interface{}, bool) {
+func (t *Tree[V]) Minimum() (string, V, bool) {
 	n := t.root
 	for {
 		if n.isLeaf() {
@@ -423,11 +428,11 @@ func (t *Tree) Minimum() (string, interface{}, bool) {
 			break
 		}
 	}
-	return "", nil, false
+	return "", zeroVal[V](), false
 }
 
 // Maximum is used to return the maximum value in the tree
-func (t *Tree) Maximum() (string, interface{}, bool) {
+func (t *Tree[V]) Maximum() (string, V, bool) {
 	n := t.root
 	for {
 		if num := len(n.edges); num > 0 {
@@ -439,16 +444,16 @@ func (t *Tree) Maximum() (string, interface{}, bool) {
 		}
 		break
 	}
-	return "", nil, false
+	return "", zeroVal[V](), false
 }
 
 // Walk is used to walk the tree
-func (t *Tree) Walk(fn WalkFn) {
+func (t *Tree[V]) Walk(fn WalkFn[V]) {
 	recursiveWalk(t.root, fn)
 }
 
 // WalkPrefix is used to walk the tree under a prefix
-func (t *Tree) WalkPrefix(prefix string, fn WalkFn) {
+func (t *Tree[V]) WalkPrefix(prefix string, fn WalkFn[V]) {
 	n := t.root
 	search := prefix
 	for {
@@ -483,7 +488,7 @@ func (t *Tree) WalkPrefix(prefix string, fn WalkFn) {
 // from the root down to a given leaf. Where WalkPrefix walks
 // all the entries *under* the given prefix, this walks the
 // entries *above* the given prefix.
-func (t *Tree) WalkPath(path string, fn WalkFn) {
+func (t *Tree[V]) WalkPath(path string, fn WalkFn[V]) {
 	n := t.root
 	search := path
 	for {
@@ -514,7 +519,7 @@ func (t *Tree) WalkPath(path string, fn WalkFn) {
 
 // recursiveWalk is used to do a pre-order walk of a node
 // recursively. Returns true if the walk should be aborted
-func recursiveWalk(n *node, fn WalkFn) bool {
+func recursiveWalk[V any](n *node[V], fn WalkFn[V]) bool {
 	// Visit the leaf values if any
 	if n.leaf != nil && fn(n.leaf.key, n.leaf.val) {
 		return true
@@ -530,9 +535,9 @@ func recursiveWalk(n *node, fn WalkFn) bool {
 }
 
 // ToMap is used to walk the tree and convert it into a map
-func (t *Tree) ToMap() map[string]interface{} {
-	out := make(map[string]interface{}, t.size)
-	t.Walk(func(k string, v interface{}) bool {
+func (t *Tree[V]) ToMap() map[string]V {
+	out := make(map[string]V, t.size)
+	t.Walk(func(k string, v V) bool {
 		out[k] = v
 		return false
 	})

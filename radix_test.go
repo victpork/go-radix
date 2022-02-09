@@ -67,7 +67,7 @@ func TestRadix(t *testing.T) {
 }
 
 func TestRoot(t *testing.T) {
-	r := New()
+	r := New[bool]()
 	_, ok := r.Delete("")
 	if ok {
 		t.Fatalf("bad")
@@ -88,7 +88,7 @@ func TestRoot(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 
-	r := New()
+	r := New[bool]()
 
 	s := []string{"", "A", "AB"}
 
@@ -121,7 +121,7 @@ func TestDeletePrefix(t *testing.T) {
 	}
 
 	for _, test := range cases {
-		r := New()
+		r := New[bool]()
 		for _, ss := range test.inp {
 			r.Insert(ss, true)
 		}
@@ -132,7 +132,7 @@ func TestDeletePrefix(t *testing.T) {
 		}
 
 		out := []string{}
-		fn := func(s string, v interface{}) bool {
+		fn := func(s string, v bool) bool {
 			out = append(out, s)
 			return false
 		}
@@ -145,7 +145,7 @@ func TestDeletePrefix(t *testing.T) {
 }
 
 func TestLongestPrefix(t *testing.T) {
-	r := New()
+	r := New[bool]()
 
 	keys := []string{
 		"",
@@ -156,7 +156,7 @@ func TestLongestPrefix(t *testing.T) {
 		"foozip",
 	}
 	for _, k := range keys {
-		r.Insert(k, nil)
+		r.Insert(k, true)
 	}
 	if r.Len() != len(keys) {
 		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
@@ -193,7 +193,7 @@ func TestLongestPrefix(t *testing.T) {
 }
 
 func TestWalkPrefix(t *testing.T) {
-	r := New()
+	r := New[bool]()
 
 	keys := []string{
 		"foobar",
@@ -203,7 +203,7 @@ func TestWalkPrefix(t *testing.T) {
 		"zipzap",
 	}
 	for _, k := range keys {
-		r.Insert(k, nil)
+		r.Insert(k, false)
 	}
 	if r.Len() != len(keys) {
 		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
@@ -258,7 +258,7 @@ func TestWalkPrefix(t *testing.T) {
 
 	for _, test := range cases {
 		out := []string{}
-		fn := func(s string, v interface{}) bool {
+		fn := func(s string, v bool) bool {
 			out = append(out, s)
 			return false
 		}
@@ -272,7 +272,7 @@ func TestWalkPrefix(t *testing.T) {
 }
 
 func TestWalkPath(t *testing.T) {
-	r := New()
+	r := New[bool]()
 
 	keys := []string{
 		"foo",
@@ -283,7 +283,7 @@ func TestWalkPath(t *testing.T) {
 		"zipzap",
 	}
 	for _, k := range keys {
-		r.Insert(k, nil)
+		r.Insert(k, false)
 	}
 	if r.Len() != len(keys) {
 		t.Fatalf("bad len: %v %v", r.Len(), len(keys))
@@ -330,7 +330,7 @@ func TestWalkPath(t *testing.T) {
 
 	for _, test := range cases {
 		out := []string{}
-		fn := func(s string, v interface{}) bool {
+		fn := func(s string, v bool) bool {
 			out = append(out, s)
 			return false
 		}
